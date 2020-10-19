@@ -33,25 +33,21 @@ type IModule interface {
 	Start() error
 	Stop() error
 	GetID() ModuleID
-	IsStart() bool
+	IsStarted() bool
 }
 
-type ModuleCreator func() IModule
+type ModuleCreator func(ModuleID) (IModule, error)
 
 type ModuleServer struct {
-	modules        map[ModuleID]IModule
-	moduleCreators map[ModuleID]ModuleCreator
+	modules       map[ModuleID]IModule
+	moduleCreator ModuleCreator
 }
 
-func NewModuleServer() *ModuleServer {
+func NewModuleServer(creator ModuleCreator) *ModuleServer {
 	return &ModuleServer{
-		modules:        make(map[ModuleID]IModule),
-		moduleCreators: make(map[ModuleID]ModuleCreator),
+		modules:       make(map[ModuleID]IModule),
+		moduleCreator: creator,
 	}
-}
-
-func (ptr *ModuleServer) AddModuleCreator(ID ModuleID, creator ModuleCreator) {
-	ptr.moduleCreators[ID] = creator
 }
 
 func (ptr *ModuleServer) LoadConfig(config *ModuleServerConfig) ([]ModuleID, error) {
@@ -68,14 +64,9 @@ func (ptr *ModuleServer) LoadConfig(config *ModuleServerConfig) ([]ModuleID, err
 			continue
 		}
 
-		creator, ok := ptr.moduleCreators[cfg.ID]
-		if !ok {
-			return nil, errors.New("creation function for module " + string(cfg.ID) + " not found")
-		}
-
-		newModule := creator()
-		if newModule == nil {
-			return nil, errors.New("creation module " + string(cfg.ID) + " failed")
+		newModule, err := ptr.moduleCreator(cfg.ID)
+		if err != nil {
+			return nil, errors.New("creation module " + string(cfg.ID) + " failed, " + err.Error())
 		}
 
 		if err := newModule.LoadConfig(cfg.Params); err != nil {
@@ -94,26 +85,49 @@ func (ptr *ModuleServer) GetModule(ID ModuleID) IModule {
 	return ptr.modules[ID]
 }
 
-func (ptr *ModuleServer) StartModule(ID ModuleID) error {
+func (ptr *ModuleServer) Start() error {
+	for moduleID := range ptr.modules {
+		if err := ptr.startModule(moduleID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (ptr *ModuleServer) Stop() error {
+	var errList string
+	for moduleID := range ptr.modules {
+		if err := ptr.startModule(moduleID); err != nil {
+			errList += "[" + err.Error() + "], "
+		}
+	}
+	if len(errList) != 0 {
+		errList = errList[:len(errList)-1]
+		return errors.New(errList)
+	}
+	return nil
+}
+
+func (ptr *ModuleServer) startModule(ID ModuleID) error {
 	module, ok := ptr.modules[ID]
 	if !ok {
 		return errors.New("module " + string(ID) + " not found")
 	}
 
-	if module.IsStart() {
+	if module.IsStarted() {
 		return errors.New("module " + string(ID) + " already started")
 	}
 
 	return module.Start()
 }
 
-func (ptr *ModuleServer) StopModule(ID ModuleID) error {
+func (ptr *ModuleServer) stopModule(ID ModuleID) error {
 	module, ok := ptr.modules[ID]
 	if !ok {
 		return errors.New("module " + string(ID) + " not found")
 	}
 
-	if !module.IsStart() {
+	if !module.IsStarted() {
 		return errors.New("module " + string(ID) + " already stopped")
 	}
 
