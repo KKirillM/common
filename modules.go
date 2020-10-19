@@ -85,6 +85,7 @@ func (ptr *ModuleServer) GetModule(ID ModuleID) IModule {
 	return ptr.modules[ID]
 }
 
+// TODO: добавить параллельный запуск всех модулей
 func (ptr *ModuleServer) Start() error {
 	for moduleID := range ptr.modules {
 		if err := ptr.startModule(moduleID); err != nil {
@@ -94,6 +95,7 @@ func (ptr *ModuleServer) Start() error {
 	return nil
 }
 
+// TODO: добавить параллельную остановку всех модулей
 func (ptr *ModuleServer) Stop() error {
 	var errList string
 	for moduleID := range ptr.modules {
@@ -102,7 +104,7 @@ func (ptr *ModuleServer) Stop() error {
 		}
 	}
 	if len(errList) != 0 {
-		errList = errList[:len(errList)-1]
+		errList = errList[:len(errList)-2]
 		return errors.New(errList)
 	}
 	return nil
