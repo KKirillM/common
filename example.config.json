@@ -1,0 +1,25 @@
+{
+    "modules": [
+
+        {
+            "id": "Module1",
+            "disable": false,
+            "params": {
+                "param1": 1,
+                "param2": "2",
+                "param3": true
+            }
+        },
+
+        {
+            "id": "Module2",
+            "disable": true,
+            "params": {
+                "param1": 1,
+                "param2": "2",
+                "param3": false
+            }
+        }
+    
+    ]
+}
