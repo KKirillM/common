@@ -29,3 +29,71 @@ func LoadConfigFile(path string) (string, error) {
 
 	return string(content), nil
 }
+
+func BaseCurrency(symbol string) string {
+	symbols := strings.Split(symbol, "/")
+	if len(symbols) != 2 {
+		return ""
+	}
+	return symbols[0]
+}
+
+func QuoteCurrency(symbol string) string {
+	symbols := strings.Split(symbol, "/")
+	if len(symbols) != 2 {
+		return ""
+	}
+	return symbols[1]
+}
+
+func SliceUnion(a, b []string) (c []string) {
+
+	m := make(map[string]bool)
+
+	for _, item := range a {
+		m[item] = true
+		c = append(c, item)
+	}
+
+	for _, item := range b {
+		if _, ok := m[item]; !ok {
+			c = append(c, item)
+		}
+	}
+
+	return
+}
+
+func SliceIntersection(a, b []string) (c []string) {
+
+	m := make(map[string]struct{})
+
+	for _, item := range a {
+		m[item] = struct{}{}
+	}
+
+	for _, item := range b {
+		if _, ok := m[item]; ok {
+			c = append(c, item)
+		}
+	}
+
+	return
+}
+
+func SliceDifference(a, b []string) (c []string) {
+
+	m := make(map[string]struct{})
+
+	for _, item := range a {
+		m[item] = struct{}{}
+	}
+
+	for _, item := range b {
+		if _, ok := m[item]; !ok {
+			c = append(c, item)
+		}
+	}
+
+	return
+}
