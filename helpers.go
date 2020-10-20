@@ -2,6 +2,7 @@ package common
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"strings"
 )
@@ -17,18 +18,14 @@ func LoadConfigFile(path string) (string, error) {
 		s = strings.Split(s[len(s)-1], ".")
 		applicaitonName = s[0]
 		path = applicaitonName + ".config.json"
+		cwd, _ := os.Getwd()
+		path = cwd + "\\" + path
 	}
 
-	file, err := os.Open(path)
+	content, err := ioutil.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("can't open config file: %s, %v", path, err)
 	}
-	defer file.Close()
 
-	var bytes []byte
-	if _, err = file.Read(bytes); err != nil {
-		return "", fmt.Errorf("can't read config file: %s, %v", path, err)
-	}
-
-	return string(bytes), nil
+	return string(content), nil
 }

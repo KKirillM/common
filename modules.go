@@ -99,7 +99,7 @@ func (ptr *ModuleServer) Start() error {
 func (ptr *ModuleServer) Stop() error {
 	var errList string
 	for moduleID := range ptr.modules {
-		if err := ptr.startModule(moduleID); err != nil {
+		if err := ptr.stopModule(moduleID); err != nil {
 			errList += "[" + err.Error() + "], "
 		}
 	}
