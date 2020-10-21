@@ -1,10 +1,12 @@
 package common
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
+	"time"
 )
 
 func LoadConfigFile(path string) (string, error) {
@@ -96,4 +98,25 @@ func SliceDifference(a, b []string) (c []string) {
 	}
 
 	return
+}
+
+func IsContextCancelled(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
+
+func SleepWithContext(ctx context.Context, duration time.Duration) {
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return
+	case <-timer.C:
+		return
+	}
 }

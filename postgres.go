@@ -1,10 +1,10 @@
 package common
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -13,7 +13,7 @@ import (
 	_ "github.com/lib/pq" // PostgreSQL driver
 )
 
-const driverName = "postgres"
+const sqlDriverName = "postgres"
 
 const LOG = "log"
 
@@ -30,34 +30,39 @@ type DBConfig struct {
 
 type Postgres struct {
 	config            *DBConfig
-	Conn              *sql.DB
-	Listener          *pq.Listener
+	conn              *sql.DB
+	listener          *pq.Listener
 	Source            string
-	ConnectionInfo    string
-	ListenIdleTimeout time.Duration
+	connectionInfo    string
+	listenIdleTimeout time.Duration
 	handler           func(string)
 	errorHandler      func(error)
-	Logger            func(...interface{}) error
 }
 
 func NewPostgres() *Postgres {
 	return &Postgres{}
 }
 
-func (ptr *Postgres) LoadConfig(config *DBConfig) {
+func (ptr *Postgres) LoadConfig(config *DBConfig) error {
+	if len(config.Host) == 0 {
+		return errors.New("db config failed, host not found")
+	}
+	if config.Port == 0 {
+		return errors.New("db config failed, port not found")
+	}
+	if len(config.User) == 0 || len(config.Password) == 0 {
+		return errors.New("db config failed, login or password not found")
+	}
+	if len(config.Database) == 0 {
+		return errors.New("db config failed, database name not found")
+	}
 	ptr.config = config
+	return nil
 }
 
-func (pgm *Postgres) Connect() error {
-	return pgm.connect()
-}
-
-/*
-connect - connecting to DB
-*/
-func (pgm *Postgres) connect() error {
-	dbConfig := pgm.config
-	pgm.ConnectionInfo = fmt.Sprintf("postgres://%v:%v@%v:%v/%v?sslmode=%v",
+func (ptr *Postgres) Connect() (err error) {
+	dbConfig := ptr.config
+	ptr.connectionInfo = fmt.Sprintf("postgres://%v:%v@%v:%v/%v?sslmode=%v",
 		dbConfig.User,
 		dbConfig.Password,
 		dbConfig.Host,
@@ -65,99 +70,91 @@ func (pgm *Postgres) connect() error {
 		dbConfig.Database,
 		dbConfig.SSLmode,
 	)
-	conn, err := sql.Open(driverName, pgm.ConnectionInfo)
+
+	ptr.conn, err = sql.Open(sqlDriverName, ptr.connectionInfo)
 	if err != nil {
-		fmt.Println("Connection error: ", err)
-		return err
+		return errors.New("connection failed, " + err.Error())
 	}
-	if conn == nil {
-		return pgm.Log(ERROR, "Connection to PostgreSQL is nil", nil, nil)
-	}
-	pgm.Conn = conn
+
 	return nil
 }
 
 /*
 Load - selecting data from DB
 */
-func (pgm *Postgres) Load(source string, fields string, query interface{}) (*sql.Rows, error) {
-	if err := pgm.checkConnection(); err != nil {
+func (ptr *Postgres) Load(ctx context.Context, table string, fields string, query interface{}) (*sql.Rows, error) {
+	if err := ptr.checkConnection(ctx); err != nil {
 		return nil, err
 	}
 
-	SQL := "SELECT " + fields + " FROM " + source
+	SQL := "SELECT " + fields + " FROM " + table
 	if query != nil {
 		SQL += " WHERE " + query.(string)
 	}
 	SQL += ";"
-	// fmt.Println(SQL)
-	rows, err := pgm.Exec(SQL)
+
+	rows, err := ptr.Exec(ctx, SQL)
 	if err != nil {
 		return rows, err
 	}
+
 	return rows, nil
 }
 
 /*
 Save — method inserts in DB row on duplicate key updates fields
 */
-func (pgm *Postgres) Save(fields []string, values []interface{}, key map[string]interface{}) (sql.Result, error) {
-	SQL := pgm.generateInsertQuery(fields)
-	SQL += pgm.generateOnConflictQuery(fields, key)
-	return pgm.execute(SQL, values)
+func (ptr *Postgres) Save(ctx context.Context, fields []string, values []interface{}, key map[string]interface{}) (sql.Result, error) {
+	SQL := ptr.generateInsertQuery(fields)
+	SQL += ptr.generateOnConflictQuery(fields, key)
+	return ptr.execute(ctx, SQL, values)
 }
 
 /*
 Create - creating new row in DB. Does not updates on conflict
 */
-func (pgm *Postgres) Create(fields []string, values []interface{}) (sql.Result, error) {
-	SQL := pgm.generateInsertQuery(fields)
-	return pgm.execute(SQL, values)
+func (ptr *Postgres) Create(ctx context.Context, fields []string, values []interface{}) (sql.Result, error) {
+	SQL := ptr.generateInsertQuery(fields)
+	return ptr.execute(ctx, SQL, values)
 }
 
-func (pgm *Postgres) execute(SQL string, values []interface{}) (res sql.Result, err error) {
-	if err = pgm.checkConnection(); err != nil {
+func (ptr *Postgres) execute(ctx context.Context, SQL string, values []interface{}) (res sql.Result, err error) {
+	if err = ptr.checkConnection(ctx); err != nil {
 		return
 	}
 
-	stmt, err := pgm.Conn.Prepare(SQL)
+	stmt, err := ptr.conn.Prepare(SQL)
 	if err != nil {
-		fmt.Println("Preparing statement error: ", err, SQL)
-		return
+		return nil, errors.New("preparing statement error: " + err.Error() + ", query: " + SQL)
 	}
 	defer stmt.Close()
-	res, err = stmt.Exec(values...)
-	if err != nil {
-		log.Println("Error in execute:", err)
-	}
-	return
+
+	return stmt.Exec(values...)
 }
 
 /*
 Exec - executing prepared SQL string
 */
-func (pgm *Postgres) Exec(SQL string) (rows *sql.Rows, err error) {
-	if err = pgm.checkConnection(); err != nil {
+func (ptr *Postgres) Exec(ctx context.Context, SQL string) (rows *sql.Rows, err error) {
+	if err = ptr.checkConnection(ctx); err != nil {
 		return
 	}
-	rows, err = pgm.Conn.Query(SQL)
-	if err != nil {
-		log.Println("Error in Exec:", err)
-	}
-	return
+
+	return ptr.conn.Query(SQL)
 }
 
-func (pgm *Postgres) checkConnection() error {
-	if pgm.Conn == nil {
-		return pgm.connect()
+func (ptr *Postgres) checkConnection(ctx context.Context) error {
+	if ptr.conn == nil {
+		return ptr.Connect()
 	}
-	if pgm.Conn.Stats().OpenConnections == 0 {
-		return pgm.connect()
-	}
-	return nil
+	// if ptr.conn.Stats().OpenConnections == 0 {
+	// 	return ptr.Connect()
+	// }
+	return ptr.conn.PingContext(ctx)
 }
-func (pgm *Postgres) generateInsertQuery(fields []string) string {
-	SQL := "INSERT INTO " + pgm.Source + " (" + strings.Join(fields, ",") + ") VALUES "
+
+func (ptr *Postgres) generateInsertQuery(fields []string) string {
+	SQL := "INSERT INTO " + ptr.Source + " (" + strings.Join(fields, ",") + ") VALUES "
 	var placeholder []string
 
 	for i := range fields {
@@ -167,32 +164,39 @@ func (pgm *Postgres) generateInsertQuery(fields []string) string {
 	SQL += "(" + strings.Join(placeholder, ",") + ")"
 	return SQL
 }
-func (pgm *Postgres) generateOnConflictQuery(fields []string, keys map[string]interface{}) string {
+
+func (ptr *Postgres) generateOnConflictQuery(fields []string, keys map[string]interface{}) string {
 	if len(keys) == 0 {
 		return " ON CONFLICT DO NOTHING "
 	}
+
 	var idx []string
 	for key := range keys {
 		idx = append(idx, key)
 	}
+
 	SQL := " ON CONFLICT (" + strings.Join(idx, ",") + ") DO UPDATE SET "
+
 	var placeholder []string
 	for i, field := range fields {
 		key := strconv.Itoa((i + 1))
 		value := field + " = $" + key + " "
 		placeholder = append(placeholder, value)
 	}
+
 	SQL += strings.Join(placeholder, ",")
 	return SQL
 }
 
-func (pgm *Postgres) InsertBatch(table string, fields []string, rows []interface{}, onDuplicate interface{}) error {
+func (ptr *Postgres) InsertBatch(ctx context.Context, table string, fields []string, rows []interface{}, onDuplicate interface{}) error {
 	if len(rows) == 0 {
 		return nil
 	}
-	if err := pgm.checkConnection(); err != nil {
+
+	if err := ptr.checkConnection(ctx); err != nil {
 		return err
 	}
+
 	var values = []interface{}{}
 	SQL := "insert into " + table + " (" + strings.Join(fields, ",") + ") values "
 
@@ -209,66 +213,65 @@ func (pgm *Postgres) InsertBatch(table string, fields []string, rows []interface
 		}
 		placeholder = append(placeholder, "("+strings.Join(pl, ",")+")")
 	}
+
 	SQL += strings.Join(placeholder, ",")
 	// SQL = SQL[0 : len(SQL)-1]
 	if onDuplicate != nil {
 		SQL += " ON CONFLICT " + onDuplicate.(string)
 	}
-	stmt, err := pgm.Conn.Prepare(SQL)
-	if stmt != nil {
-		defer stmt.Close()
-	}
+
+	stmt, err := ptr.conn.Prepare(SQL)
 	if err != nil {
-		fmt.Println("[PG][ERROR] stmt: ", SQL)
-		return err
+		return errors.New("preparing statement error: " + err.Error() + ", query: " + SQL)
 	}
-	_, execErr := stmt.Exec(values...)
-	if execErr != nil {
-		fmt.Println("Exec: ", execErr)
-		return execErr
-	}
-	return nil
+	defer stmt.Close()
+
+	_, err = stmt.Exec(values...)
+
+	return err
 }
 
-func (pgm *Postgres) Listen(channel string) error {
-	if err := pgm.checkConnection(); err != nil {
+func (ptr *Postgres) Listen(ctx context.Context, channel string) error {
+	if err := ptr.checkConnection(ctx); err != nil {
 		return err
 	}
-	pgm.Log(LOG, "Listen "+pgm.config.Host+"/"+pgm.config.Database+" connecting")
+
 	reportProblem := func(ev pq.ListenerEventType, err error) {
 		if err != nil {
-			if pgm.errorHandler != nil {
-				pgm.errorHandler(err)
+			if ptr.errorHandler != nil {
+				ptr.errorHandler(err)
 			}
-			pgm.Log("Error", "pg_listener_create_error", err, nil)
 		}
 	}
 
-	pgm.Listener = pq.NewListener(pgm.ConnectionInfo, 10*time.Second, time.Minute, reportProblem)
-	err := pgm.Listener.Listen(channel)
-	if err != nil {
-		panic(err)
+	ptr.listener = pq.NewListener(ptr.connectionInfo, 10*time.Second, time.Minute, reportProblem)
+
+	if err := ptr.listener.Listen(channel); err != nil {
+		return err
 	}
-	log.Println("[LOG] Listen connected")
+
 	for {
-		pgm.HandleListen()
+		ptr.HandleListen()
+
+		if IsContextCancelled(ctx) {
+			break
+		}
 	}
+
+	return nil
 }
 
-func (mapper *Postgres) HandleListen() {
-	l := mapper.Listener
+func (ptr *Postgres) HandleListen() {
+	l := ptr.listener
 	for {
 		select {
 		case n := <-l.Notify:
-			if n == nil {
-				mapper.Log(ERROR, "Listener extra is nil: ", n.Extra)
-				return
+			if n != nil {
+				ptr.handler(n.Extra)
 			}
-			mapper.handler(n.Extra)
 			return
-		case <-time.After(mapper.ListenIdleTimeout):
-			timeout := mapper.ListenIdleTimeout.String()
-			mapper.Log(LOG, mapper.GetDBInfo()+": Received no events for "+timeout+", checking connection")
+
+		case <-time.After(ptr.listenIdleTimeout):
 			go func() {
 				l.Ping()
 			}()
@@ -277,27 +280,21 @@ func (mapper *Postgres) HandleListen() {
 	}
 }
 
-func (mapper *Postgres) OnData(handler func(string)) {
-	mapper.handler = handler
+func (ptr *Postgres) OnData(handler func(string)) {
+	ptr.handler = handler
 }
 
-func (mapper *Postgres) OnError(handler func(error)) {
-	mapper.errorHandler = handler
+func (ptr *Postgres) OnError(handler func(error)) {
+	ptr.errorHandler = handler
 }
 
 func (m *Postgres) GetDBInfo() string {
 	return m.config.Host + "/" + m.config.Database
 }
 
-func (mapper *Postgres) Close() error {
-	if mapper.Conn != nil {
-		mapper.Log("log", mapper.GetDBInfo()+" closing connection")
-		return mapper.Conn.Close()
+func (ptr *Postgres) Close() error {
+	if ptr.conn != nil {
+		return ptr.conn.Close()
 	}
 	return nil
-}
-
-func (mapper *Postgres) Log(data ...interface{}) error {
-	fmt.Println(data)
-	return errors.New(data[0].(string))
 }
