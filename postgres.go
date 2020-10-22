@@ -82,18 +82,12 @@ func (ptr *Postgres) Connect() (err error) {
 /*
 Load - selecting data from DB
 */
-func (ptr *Postgres) Load(ctx context.Context, table string, fields string, query interface{}) (*sql.Rows, error) {
+func (ptr *Postgres) Load(ctx context.Context, query string) (*sql.Rows, error) {
 	if err := ptr.checkConnection(ctx); err != nil {
 		return nil, err
 	}
 
-	SQL := "SELECT " + fields + " FROM " + table
-	if query != nil {
-		SQL += " WHERE " + query.(string)
-	}
-	SQL += ";"
-
-	rows, err := ptr.Exec(ctx, SQL)
+	rows, err := ptr.Exec(ctx, query)
 	if err != nil {
 		return rows, err
 	}
@@ -140,7 +134,7 @@ func (ptr *Postgres) Exec(ctx context.Context, SQL string) (rows *sql.Rows, err 
 		return
 	}
 
-	return ptr.conn.Query(SQL)
+	return ptr.conn.QueryContext(ctx, SQL)
 }
 
 func (ptr *Postgres) checkConnection(ctx context.Context) error {
