@@ -8,6 +8,7 @@ import (
 type IAsyncTask interface {
 	Execute()
 	Break()
+	BreakAndWait()
 }
 
 type managedObject struct {
@@ -23,6 +24,10 @@ func newManagedObject() managedObject {
 }
 
 func (ptr *managedObject) Break() {
+	close(ptr.breakChan)
+}
+
+func (ptr *managedObject) BreakAndWait() {
 	close(ptr.breakChan)
 	<-ptr.finishChan
 }
@@ -126,7 +131,7 @@ func (ptr *TasksExecutor) Terminate() {
 	ptr.Break()
 }
 
-func (ptr *TasksExecutor) Execute(task func()) error {
+func (ptr *TasksExecutor) Execute(taskName string, task func()) error {
 	if ptr.IsStoped() {
 		return errors.New("tasks executor stopped")
 	}
@@ -134,16 +139,16 @@ func (ptr *TasksExecutor) Execute(task func()) error {
 	select {
 	case ptr.tasks <- task:
 	default:
-		return errors.New("tasks queue is full")
+		return errors.New("execute " + taskName + " task failed, tasks queue is full")
 	}
 
 	return nil
 }
 
-func (ptr *TasksExecutor) ExecuteAndWait(task func()) error {
+func (ptr *TasksExecutor) ExecuteAndWait(taskName string, task func()) error {
 	done := make(chan struct{}, 1)
 
-	err := ptr.Execute(func() {
+	err := ptr.Execute(taskName, func() {
 		task()
 		done <- struct{}{}
 	})
@@ -156,10 +161,10 @@ func (ptr *TasksExecutor) ExecuteAndWait(task func()) error {
 	return nil
 }
 
-func (ptr *TasksExecutor) ExecuteAndWaitError(task func() error) error {
+func (ptr *TasksExecutor) ExecuteAndWaitError(taskName string, task func() error) error {
 	result := make(chan error, 1)
 
-	err := ptr.Execute(func() {
+	err := ptr.Execute(taskName, func() {
 		result <- task()
 	})
 

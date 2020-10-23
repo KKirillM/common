@@ -32,7 +32,6 @@ type Postgres struct {
 	config            *DBConfig
 	conn              *sql.DB
 	listener          *pq.Listener
-	Source            string
 	connectionInfo    string
 	listenIdleTimeout time.Duration
 	handler           func(string)
@@ -98,32 +97,32 @@ func (ptr *Postgres) Load(ctx context.Context, query string) (*sql.Rows, error) 
 /*
 Save — method inserts in DB row on duplicate key updates fields
 */
-func (ptr *Postgres) Save(ctx context.Context, fields []string, values []interface{}, key map[string]interface{}) (sql.Result, error) {
-	SQL := ptr.generateInsertQuery(fields)
-	SQL += ptr.generateOnConflictQuery(fields, key)
-	return ptr.execute(ctx, SQL, values)
+func (ptr *Postgres) Save(ctx context.Context, table string, fields []string, values []interface{}, keys []string) (sql.Result, error) {
+	query := ptr.generateInsertQuery(table, fields)
+	query += ptr.generateOnConflictQuery(fields, keys)
+	return ptr.execute(ctx, query, values)
 }
 
 /*
 Create - creating new row in DB. Does not updates on conflict
 */
-func (ptr *Postgres) Create(ctx context.Context, fields []string, values []interface{}) (sql.Result, error) {
-	SQL := ptr.generateInsertQuery(fields)
+func (ptr *Postgres) Create(ctx context.Context, table string, fields []string, values []interface{}) (sql.Result, error) {
+	SQL := ptr.generateInsertQuery(table, fields)
 	return ptr.execute(ctx, SQL, values)
 }
 
-func (ptr *Postgres) execute(ctx context.Context, SQL string, values []interface{}) (res sql.Result, err error) {
+func (ptr *Postgres) execute(ctx context.Context, query string, values []interface{}) (res sql.Result, err error) {
 	if err = ptr.checkConnection(ctx); err != nil {
 		return
 	}
 
-	stmt, err := ptr.conn.Prepare(SQL)
+	stmt, err := ptr.conn.Prepare(query)
 	if err != nil {
-		return nil, errors.New("preparing statement error: " + err.Error() + ", query: " + SQL)
+		return nil, errors.New("preparing statement error: " + err.Error() + ", query: " + query)
 	}
 	defer stmt.Close()
 
-	return stmt.Exec(values...)
+	return stmt.ExecContext(ctx, values...)
 }
 
 /*
@@ -147,39 +146,40 @@ func (ptr *Postgres) checkConnection(ctx context.Context) error {
 	return ptr.conn.PingContext(ctx)
 }
 
-func (ptr *Postgres) generateInsertQuery(fields []string) string {
-	SQL := "INSERT INTO " + ptr.Source + " (" + strings.Join(fields, ",") + ") VALUES "
+func (ptr *Postgres) generateInsertQuery(table string, fields []string) string {
+	query := "INSERT INTO " + table + " (" + strings.Join(fields, ",") + ") VALUES "
 	var placeholder []string
 
 	for i := range fields {
 		key := strconv.Itoa((i + 1))
 		placeholder = append(placeholder, "$"+key)
 	}
-	SQL += "(" + strings.Join(placeholder, ",") + ")"
-	return SQL
+	query += "(" + strings.Join(placeholder, ",") + ")"
+	return query
 }
 
-func (ptr *Postgres) generateOnConflictQuery(fields []string, keys map[string]interface{}) string {
+func (ptr *Postgres) generateOnConflictQuery(fields []string, keys []string) string {
 	if len(keys) == 0 {
 		return " ON CONFLICT DO NOTHING "
 	}
 
 	var idx []string
-	for key := range keys {
+	for _, key := range keys {
 		idx = append(idx, key)
 	}
 
-	SQL := " ON CONFLICT (" + strings.Join(idx, ",") + ") DO UPDATE SET "
+	query := " ON CONFLICT (" + strings.Join(idx, ",") + ") DO UPDATE SET "
 
 	var placeholder []string
 	for i, field := range fields {
-		key := strconv.Itoa((i + 1))
+		key := strconv.Itoa(i + 1)
 		value := field + " = $" + key + " "
 		placeholder = append(placeholder, value)
 	}
 
-	SQL += strings.Join(placeholder, ",")
-	return SQL
+	query += strings.Join(placeholder, ",")
+	query = query[:len(query)-1]
+	return query
 }
 
 func (ptr *Postgres) InsertBatch(ctx context.Context, table string, fields []string, rows []interface{}, onDuplicate interface{}) error {
