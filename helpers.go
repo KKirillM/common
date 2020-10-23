@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -119,4 +121,17 @@ func SleepWithContext(ctx context.Context, duration time.Duration) {
 	case <-timer.C:
 		return
 	}
+}
+
+func StopCurrentProcess() {
+	// for Linux version
+	//syscall.Kill(os.Getgid(), syscall.SIGINT)
+	// for Windows version
+	pid := os.Getpid()
+	p, _ := os.FindProcess(pid)
+	p.Signal(syscall.SIGTERM)
+}
+
+func TerminateCurrentProcess() {
+	log.Fatal("terminating current process")
 }
