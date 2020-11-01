@@ -132,6 +132,6 @@ func StopCurrentProcess() {
 	p.Signal(syscall.SIGTERM)
 }
 
-func TerminateCurrentProcess() {
-	log.Fatal("terminating current process")
+func TerminateCurrentProcess(reason string) {
+	log.Fatal("FATAL: terminating current process, reason: " + reason)
 }

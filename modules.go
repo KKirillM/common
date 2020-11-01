@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"time"
 )
 
 type ModuleID string
@@ -36,7 +38,12 @@ type IModule interface {
 	IsStarted() bool
 }
 
-type ModuleCreator func(ModuleID) (IModule, error)
+type ITerminator interface {
+	Terminate(module IModule, reason string, timeout time.Duration)
+}
+
+// с помощью указателя не интерфейс ITerminator модуль IModule может завершить работу приложения
+type ModuleCreator func(ITerminator, ModuleID) (IModule, error)
 
 type ModuleServer struct {
 	modules       map[ModuleID]IModule
@@ -64,7 +71,7 @@ func (ptr *ModuleServer) LoadConfig(config *ModuleServerConfig) ([]ModuleID, err
 			continue
 		}
 
-		newModule, err := ptr.moduleCreator(cfg.ID)
+		newModule, err := ptr.moduleCreator(ptr, cfg.ID)
 		if err != nil {
 			return nil, errors.New("creation module " + string(cfg.ID) + " failed, " + err.Error())
 		}
@@ -134,4 +141,19 @@ func (ptr *ModuleServer) stopModule(ID ModuleID) error {
 	}
 
 	return module.Stop()
+}
+
+func (ptr *ModuleServer) Terminate(module IModule, reason string, timeout time.Duration) {
+	log.Println("module " + string(module.GetID()) + " requested a stop, reason: " + reason)
+	if err := ptr.Stop(); err != nil {
+		TerminateCurrentProcess("some modules stop failed: " + err.Error())
+		return
+	}
+
+	go func() {
+		time.Sleep(timeout)
+		if module.IsStarted() {
+			TerminateCurrentProcess("timeout " + timeout.String() + " reached while stopping")
+		}
+	}()
 }

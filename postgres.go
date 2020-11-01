@@ -140,10 +140,11 @@ func (ptr *Postgres) checkConnection(ctx context.Context) error {
 	if ptr.conn == nil {
 		return ptr.Connect()
 	}
-	// if ptr.conn.Stats().OpenConnections == 0 {
-	// 	return ptr.Connect()
-	// }
-	return ptr.conn.PingContext(ctx)
+	if ptr.conn.Stats().OpenConnections == 0 {
+		return ptr.Connect()
+	}
+	return nil
+	//return ptr.conn.PingContext(ctx)
 }
 
 func (ptr *Postgres) generateInsertQuery(table string, fields []string) string {
