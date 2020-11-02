@@ -2,6 +2,7 @@ package common
 
 import (
 	"errors"
+	"log"
 	"time"
 )
 
@@ -142,6 +143,19 @@ func (ptr *TasksExecutor) Execute(taskName string, task func()) error {
 		return errors.New("execute " + taskName + " task failed, tasks queue is full")
 	}
 
+	return nil
+}
+
+func (ptr *TasksExecutor) ExecuteAnyway(taskName string, task func()) error {
+	if ptr.IsStoped() {
+		return errors.New("tasks executor stopped")
+	}
+
+	if len(ptr.tasks) == cap(ptr.tasks) {
+		log.Println("WARNING: tasks channel is full, task '" + taskName + "' execution may be delayed")
+	}
+
+	ptr.tasks <- task
 	return nil
 }
 
