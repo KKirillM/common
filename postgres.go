@@ -118,7 +118,7 @@ func (ptr *Postgres) execute(ctx context.Context, query string, values []interfa
 
 	stmt, err := ptr.conn.Prepare(query)
 	if err != nil {
-		return nil, errors.New("preparing statement error: " + err.Error() + ", query: " + query)
+		return nil, errors.New("preparing statement error, " + err.Error() + ", query: " + query)
 	}
 	defer stmt.Close()
 
@@ -217,7 +217,7 @@ func (ptr *Postgres) InsertBatch(ctx context.Context, table string, fields []str
 
 	stmt, err := ptr.conn.Prepare(SQL)
 	if err != nil {
-		return errors.New("preparing statement error: " + err.Error() + ", query: " + SQL)
+		return errors.New("preparing statement error, " + err.Error() + ", query: " + SQL)
 	}
 	defer stmt.Close()
 
