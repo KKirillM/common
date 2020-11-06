@@ -133,5 +133,5 @@ func StopCurrentProcess() {
 }
 
 func TerminateCurrentProcess(reason string) {
-	log.Fatal("FATAL: terminating current process, reason: " + reason)
+	log.Fatal("F> terminating current process, reason: " + reason)
 }
