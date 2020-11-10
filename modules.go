@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 )
 
@@ -46,12 +47,14 @@ type ITerminator interface {
 type ModuleCreator func(ITerminator, ModuleID) (IModule, error)
 
 type ModuleServer struct {
+	mu            sync.Mutex
 	modules       map[ModuleID]IModule
 	moduleCreator ModuleCreator
 }
 
 func NewModuleServer(creator ModuleCreator) *ModuleServer {
 	return &ModuleServer{
+		mu:            sync.Mutex{},
 		modules:       make(map[ModuleID]IModule),
 		moduleCreator: creator,
 	}
@@ -88,12 +91,18 @@ func (ptr *ModuleServer) LoadConfig(config *ModuleServerConfig) ([]ModuleID, err
 	return modulesID, nil
 }
 
-func (ptr *ModuleServer) GetModule(ID ModuleID) IModule {
-	return ptr.modules[ID]
-}
+// func (ptr *ModuleServer) GetModule(ID ModuleID) IModule {
+// 	ptr.mu.Lock()
+// 	defer ptr.mu.Unlock()
+
+// 	return ptr.modules[ID]
+// }
 
 // TODO: добавить параллельный запуск всех модулей
 func (ptr *ModuleServer) Start() error {
+	ptr.mu.Lock()
+	defer ptr.mu.Unlock()
+
 	for moduleID := range ptr.modules {
 		if err := ptr.startModule(moduleID); err != nil {
 			return err
@@ -104,6 +113,9 @@ func (ptr *ModuleServer) Start() error {
 
 // TODO: добавить параллельную остановку всех модулей
 func (ptr *ModuleServer) Stop() error {
+	ptr.mu.Lock()
+	defer ptr.mu.Unlock()
+
 	var errList string
 	for moduleID := range ptr.modules {
 		if err := ptr.stopModule(moduleID); err != nil {
@@ -144,6 +156,9 @@ func (ptr *ModuleServer) stopModule(ID ModuleID) error {
 }
 
 func (ptr *ModuleServer) Terminate(module IModule, reason string, timeout time.Duration) {
+	ptr.mu.Lock()
+	defer ptr.mu.Unlock()
+
 	log.Println(">E module " + string(module.GetID()) + " requested a stop, reason: " + reason)
 	if err := ptr.Stop(); err != nil {
 		TerminateCurrentProcess("some modules stop failed: " + err.Error())

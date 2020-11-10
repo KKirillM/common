@@ -1,6 +1,7 @@
 package common
 
 import (
+	"context"
 	"errors"
 	"log"
 	"time"
@@ -25,12 +26,16 @@ func newManagedObject() managedObject {
 }
 
 func (ptr *managedObject) Break() {
-	close(ptr.breakChan)
+	if !ptr.IsStoped() {
+		close(ptr.breakChan)
+	}
 }
 
 func (ptr *managedObject) BreakAndWait() {
-	close(ptr.breakChan)
-	<-ptr.finishChan
+	if !ptr.IsStoped() {
+		close(ptr.breakChan)
+		<-ptr.finishChan
+	}
 }
 
 func (ptr *managedObject) IsStoped() bool {
@@ -128,8 +133,10 @@ func (ptr *TasksExecutor) Run() {
 }
 
 func (ptr *TasksExecutor) Terminate() {
-	ptr.terminate = true
-	ptr.Break()
+	if !ptr.IsStoped() {
+		ptr.terminate = true
+		ptr.Break()
+	}
 }
 
 func (ptr *TasksExecutor) Execute(taskName string, task func()) error {
@@ -146,16 +153,20 @@ func (ptr *TasksExecutor) Execute(taskName string, task func()) error {
 	return nil
 }
 
-func (ptr *TasksExecutor) ExecuteAnyway(taskName string, task func()) error {
+func (ptr *TasksExecutor) ExecuteAnyway(ctx context.Context, taskName string, task func()) error {
 	if ptr.IsStoped() {
 		return errors.New("tasks executor stopped")
 	}
 
 	if len(ptr.tasks) == cap(ptr.tasks) {
-		log.Println("WARNING: tasks channel is full, task '" + taskName + "' execution may be delayed")
+		log.Println("W> tasks channel is full, task '" + taskName + "' execution may be delayed")
 	}
 
-	ptr.tasks <- task
+	select {
+	case ptr.tasks <- task:
+	case <-ctx.Done():
+	}
+
 	return nil
 }
 
