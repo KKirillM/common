@@ -116,7 +116,7 @@ func (ptr *Postgres) execute(ctx context.Context, query string, values []interfa
 		return
 	}
 
-	stmt, err := ptr.conn.Prepare(query)
+	stmt, err := ptr.conn.PrepareContext(ctx, query)
 	if err != nil {
 		return nil, errors.New("preparing statement error, " + err.Error() + ", query: " + query)
 	}

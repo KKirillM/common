@@ -3,7 +3,6 @@ package common
 import (
 	"context"
 	"errors"
-	"log"
 	"time"
 )
 
@@ -158,9 +157,10 @@ func (ptr *TasksExecutor) ExecuteAnyway(ctx context.Context, taskName string, ta
 		return errors.New("tasks executor stopped")
 	}
 
-	if len(ptr.tasks) == cap(ptr.tasks) {
-		log.Println("W> tasks channel is full, task '" + taskName + "' execution may be delayed")
-	}
+	// сделать вывод в лог статистику загруженности канала
+	// if len(ptr.tasks) == cap(ptr.tasks) {
+	// 	log.Println("W> tasks channel is full, task '" + taskName + "' execution may be delayed")
+	// }
 
 	select {
 	case ptr.tasks <- task:
