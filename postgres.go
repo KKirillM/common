@@ -98,6 +98,9 @@ func (ptr *Postgres) Load(ctx context.Context, query string) (*sql.Rows, error) 
 Save — method inserts in DB row on duplicate key updates fields
 */
 func (ptr *Postgres) Save(ctx context.Context, table string, fields []string, values []interface{}, keys []string) (sql.Result, error) {
+	if len(fields) != len(values) {
+		return nil, errors.New("length of fields and length of values are different")
+	}
 	query := ptr.generateInsertQuery(table, fields)
 	query += ptr.generateOnConflictQuery(fields, keys)
 	return ptr.execute(ctx, query, values)
@@ -107,8 +110,11 @@ func (ptr *Postgres) Save(ctx context.Context, table string, fields []string, va
 Create - creating new row in DB. Does not updates on conflict
 */
 func (ptr *Postgres) Create(ctx context.Context, table string, fields []string, values []interface{}) (sql.Result, error) {
-	SQL := ptr.generateInsertQuery(table, fields)
-	return ptr.execute(ctx, SQL, values)
+	if len(fields) != len(values) {
+		return nil, errors.New("length of fields and length of values are different")
+	}
+	query := ptr.generateInsertQuery(table, fields)
+	return ptr.execute(ctx, query, values)
 }
 
 func (ptr *Postgres) execute(ctx context.Context, query string, values []interface{}) (res sql.Result, err error) {
@@ -123,6 +129,14 @@ func (ptr *Postgres) execute(ctx context.Context, query string, values []interfa
 	defer stmt.Close()
 
 	return stmt.ExecContext(ctx, values...)
+}
+
+func (ptr *Postgres) Update(ctx context.Context, table string, fields []string, values []interface{}, condition string) (sql.Result, error) {
+	if len(fields) != len(values) {
+		return nil, errors.New("length of fields and length of values are different")
+	}
+	query := ptr.generateUpdateQuery(table, fields, condition)
+	return ptr.execute(ctx, query, values)
 }
 
 /*
@@ -156,6 +170,23 @@ func (ptr *Postgres) generateInsertQuery(table string, fields []string) string {
 		placeholder = append(placeholder, "$"+key)
 	}
 	query += "(" + strings.Join(placeholder, ",") + ")"
+	return query
+}
+
+func (ptr *Postgres) generateUpdateQuery(table string, fields []string, condition string) string {
+	query := "UPDATE " + table + " SET "
+	var placeholder []string
+
+	for i, name := range fields {
+		key := strconv.Itoa((i + 1))
+		placeholder = append(placeholder, name+"=$"+key)
+	}
+	query += strings.Join(placeholder, ",")
+
+	if len(condition) != 0 {
+		query += " WHERE " + condition
+	}
+
 	return query
 }
 
