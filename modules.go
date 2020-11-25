@@ -156,9 +156,6 @@ func (ptr *ModuleServer) stopModule(ID ModuleID) error {
 }
 
 func (ptr *ModuleServer) Terminate(module IModule, reason string, timeout time.Duration) {
-	ptr.mu.Lock()
-	defer ptr.mu.Unlock()
-
 	log.Println(">E module " + string(module.GetID()) + " requested a stop, reason: " + reason)
 	if err := ptr.Stop(); err != nil {
 		TerminateCurrentProcess("some modules stop failed: " + err.Error())
