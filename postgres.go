@@ -106,6 +106,19 @@ func (ptr *Postgres) Save(ctx context.Context, table string, fields []string, va
 	return ptr.execute(ctx, query, values)
 }
 
+func (ptr *Postgres) SaveBulk(ctx context.Context, table string, fields []string, rows [][]interface{}, keys []string) (sql.Result, error) {
+	query := ptr.generateInsertBulkQuery(table, fields, len(rows))
+	query += ptr.generateOnConflictBulkQuery(fields, keys)
+
+	valueArgs := make([]interface{}, 0, len(rows)*len(fields))
+	for _, values := range rows {
+		for _, value := range values {
+			valueArgs = append(valueArgs, value)
+		}
+	}
+	return ptr.execute(ctx, query, valueArgs)
+}
+
 /*
 Create - creating new row in DB. Does not updates on conflict
 */
@@ -163,13 +176,33 @@ func (ptr *Postgres) checkConnection(ctx context.Context) error {
 
 func (ptr *Postgres) generateInsertQuery(table string, fields []string) string {
 	query := "INSERT INTO " + table + " (" + strings.Join(fields, ",") + ") VALUES "
-	var placeholder []string
 
+	valueStrings := make([]string, 0, len(fields))
 	for i := range fields {
 		key := strconv.Itoa((i + 1))
-		placeholder = append(placeholder, "$"+key)
+		valueStrings = append(valueStrings, "$"+key)
 	}
-	query += "(" + strings.Join(placeholder, ",") + ")"
+	query += "(" + strings.Join(valueStrings, ",") + ")"
+	return query
+}
+
+func (ptr *Postgres) generateInsertBulkQuery(table string, fields []string, rows int) string {
+	query := "INSERT INTO " + table + " (" + strings.Join(fields, ",") + ") VALUES "
+
+	flen := len(fields)
+	valueStrings := make([]string, 0, rows)
+	for i := 0; i < rows; i++ {
+		var values string
+		for j := 1; j <= flen; j++ {
+			if len(values) > 0 {
+				values += ", "
+			}
+			values += fmt.Sprintf("$%d", i*flen+j)
+		}
+		valueStrings = append(valueStrings, fmt.Sprintf("(%s)", values))
+	}
+
+	query += strings.Join(valueStrings, ",")
 	return query
 }
 
@@ -195,12 +228,7 @@ func (ptr *Postgres) generateOnConflictQuery(fields []string, keys []string) str
 		return " ON CONFLICT DO NOTHING "
 	}
 
-	var idx []string
-	for _, key := range keys {
-		idx = append(idx, key)
-	}
-
-	query := " ON CONFLICT (" + strings.Join(idx, ",") + ") DO UPDATE SET "
+	query := " ON CONFLICT (" + strings.Join(keys, ",") + ") DO UPDATE SET "
 
 	var placeholder []string
 	for i, field := range fields {
@@ -211,6 +239,25 @@ func (ptr *Postgres) generateOnConflictQuery(fields []string, keys []string) str
 
 	query += strings.Join(placeholder, ",")
 	query = query[:len(query)-1]
+	return query
+}
+
+func (ptr *Postgres) generateOnConflictBulkQuery(fields []string, keys []string) string {
+	if len(keys) == 0 {
+		return " ON CONFLICT DO NOTHING "
+	}
+
+	query := " ON CONFLICT (" + strings.Join(keys, ",") + ") DO UPDATE SET "
+
+	var values string
+	for _, field := range fields {
+		if len(values) > 0 {
+			values += ", "
+		}
+		values += field + " = excluded." + field
+	}
+
+	query += values
 	return query
 }
 
