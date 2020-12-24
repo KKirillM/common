@@ -116,18 +116,28 @@ TasksExecutor
 
 type TasksExecutor struct {
 	managedObject
-	tasks     chan func()
-	terminate bool
+	tasks            chan func()
+	terminate        bool
+	monitoringParams *MonitoringParams
 }
 
-func NewTasksExecutor(queueSize int) *TasksExecutor {
+type MonitoringParams struct {
+	Interval     time.Duration
+	UserCallback func(used int)
+}
+
+func NewTasksExecutor(queueSize int, params *MonitoringParams) *TasksExecutor {
 	return &TasksExecutor{
-		managedObject: newManagedObject(),
-		tasks:         make(chan func(), queueSize),
+		managedObject:    newManagedObject(),
+		tasks:            make(chan func(), queueSize),
+		monitoringParams: params,
 	}
 }
 
 func (ptr *TasksExecutor) Run() {
+	if ptr.monitoringParams != nil {
+		go ptr.monitoringCycle()
+	}
 	go ptr.executionCycle()
 }
 
@@ -156,11 +166,6 @@ func (ptr *TasksExecutor) ExecuteAnyway(ctx context.Context, taskName string, ta
 	if ptr.IsStoped() {
 		return errors.New("tasks executor stopped")
 	}
-
-	// сделать вывод в лог статистику загруженности канала
-	// if len(ptr.tasks) == cap(ptr.tasks) {
-	// 	log.Println("W> tasks channel is full, task '" + taskName + "' execution may be delayed")
-	// }
 
 	select {
 	case ptr.tasks <- task:
@@ -227,6 +232,31 @@ func (ptr *TasksExecutor) executionCycle() {
 		case task := <-ptr.tasks:
 			{
 				task()
+			}
+		case <-ptr.breakChan:
+			return
+		}
+	}
+}
+
+func (ptr *TasksExecutor) monitoringCycle() {
+	callback := ptr.monitoringParams.UserCallback
+	if callback == nil {
+		return
+	}
+
+	interval := ptr.monitoringParams.Interval
+	timer := time.NewTimer(interval)
+
+	for {
+		select {
+		case <-timer.C:
+			{
+				capacity := cap(ptr.tasks)
+				length := len(ptr.tasks)
+				used := 100 * length / capacity
+				callback(used)
+				timer.Reset(interval)
 			}
 		case <-ptr.breakChan:
 			return
