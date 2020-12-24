@@ -86,7 +86,7 @@ func newDispatcher(workerPool chan *worker, jobQueue chan Job) *dispatcher {
 // Represents user request, function which should be executed in some worker.
 type Job func()
 
-type Pool struct {
+type JobPool struct {
 	JobQueue   chan Job
 	dispatcher *dispatcher
 	wg         sync.WaitGroup
@@ -97,7 +97,7 @@ type Pool struct {
 // queueLen - how many jobs can we accept until we block
 //
 // Returned object contains JobQueue reference, which you can use to send job to pool.
-func NewJobPool(jobQueueLen int) *Pool {
+func NewJobPool(jobQueueLen int) *JobPool {
 	numWorkers := runtime.NumCPU() - 1
 	if jobQueueLen < numWorkers {
 		numWorkers = jobQueueLen
@@ -110,7 +110,7 @@ func NewJobPool(jobQueueLen int) *Pool {
 	jobQueue := make(chan Job, jobQueueLen)
 	workerPool := make(chan *worker, numWorkers)
 
-	pool := &Pool{
+	pool := &JobPool{
 		JobQueue:   jobQueue,
 		dispatcher: newDispatcher(workerPool, jobQueue),
 	}
@@ -118,7 +118,7 @@ func NewJobPool(jobQueueLen int) *Pool {
 	return pool
 }
 
-func (p *Pool) AddJob(job Job) {
+func (p *JobPool) AddJob(job Job) {
 	p.wg.Add(1)
 	p.JobQueue <- func() {
 		defer p.wg.Done()
@@ -127,12 +127,12 @@ func (p *Pool) AddJob(job Job) {
 }
 
 // Will wait for all jobs to finish.
-func (p *Pool) WaitAll() {
+func (p *JobPool) WaitAll() {
 	p.wg.Wait()
 }
 
 // Will release resources used by pool
-func (p *Pool) Release() {
+func (p *JobPool) Release() {
 	p.dispatcher.stop <- struct{}{}
 	<-p.dispatcher.stop
 }
