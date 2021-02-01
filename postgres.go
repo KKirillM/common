@@ -19,6 +19,14 @@ const LOG = "log"
 
 const ERROR = "error"
 
+type QueryContext struct {
+	Ctx    context.Context
+	Table  string
+	Fields []string
+	Values []interface{}
+	Keys   []string
+}
+
 type DBConfig struct {
 	User,
 	Password,
@@ -302,6 +310,48 @@ func (ptr *Postgres) InsertBatch(ctx context.Context, table string, fields []str
 	_, err = stmt.Exec(values...)
 
 	return err
+}
+
+func (ptr *Postgres) ExecTransaction(ctx context.Context, queryCtx []*QueryContext) error {
+	if err := ptr.checkConnection(ctx); err != nil {
+		return err
+	}
+
+	tx, err := ptr.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	for _, context := range queryCtx {
+		if len(context.Fields) != len(context.Values) {
+			return errors.New("length of fields and length of values are different")
+		}
+
+		query := ptr.generateInsertQuery(context.Table, context.Fields)
+		query += ptr.generateOnConflictQuery(context.Fields, context.Keys)
+
+		// _, err = tx.ExecContext(context.Ctx, query)
+		// if err != nil {
+		// 	tx.Rollback()
+		// 	return errors.New(err.Error() + ", query: " + query)
+		// }
+
+		stmt, err := tx.PrepareContext(ctx, query)
+		if err != nil {
+			return errors.New("preparing statement error, " + err.Error() + ", query: " + query)
+		}
+		defer stmt.Close()
+
+		if _, err = stmt.ExecContext(ctx, context.Values...); err != nil {
+			return errors.New("exec statement error, " + err.Error() + ", query: " + query)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (ptr *Postgres) Listen(ctx context.Context, channel string) error {
