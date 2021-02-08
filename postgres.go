@@ -96,7 +96,7 @@ func (ptr *Postgres) Load(ctx context.Context, query string) (*sql.Rows, error) 
 
 	rows, err := ptr.Exec(ctx, query)
 	if err != nil {
-		return rows, err
+		return rows, errors.New(err.Error() + ", query: " + query)
 	}
 
 	return rows, nil
@@ -111,7 +111,11 @@ func (ptr *Postgres) Save(ctx context.Context, table string, fields []string, va
 	}
 	query := ptr.generateInsertQuery(table, fields)
 	query += ptr.generateOnConflictQuery(fields, keys)
-	return ptr.execute(ctx, query, values)
+	result, err := ptr.execute(ctx, query, values)
+	if err != nil {
+		err = errors.New(err.Error() + ", query: " + query)
+	}
+	return result, err
 }
 
 func (ptr *Postgres) SaveBulk(ctx context.Context, table string, fields []string, rows [][]interface{}, keys []string) (sql.Result, error) {
@@ -124,7 +128,11 @@ func (ptr *Postgres) SaveBulk(ctx context.Context, table string, fields []string
 			valueArgs = append(valueArgs, value)
 		}
 	}
-	return ptr.execute(ctx, query, valueArgs)
+	result, err := ptr.execute(ctx, query, valueArgs)
+	if err != nil {
+		err = errors.New(err.Error() + ", query: " + query)
+	}
+	return result, err
 }
 
 /*
@@ -135,7 +143,11 @@ func (ptr *Postgres) Create(ctx context.Context, table string, fields []string, 
 		return nil, errors.New("length of fields and length of values are different")
 	}
 	query := ptr.generateInsertQuery(table, fields)
-	return ptr.execute(ctx, query, values)
+	result, err := ptr.execute(ctx, query, values)
+	if err != nil {
+		err = errors.New(err.Error() + ", query: " + query)
+	}
+	return result, err
 }
 
 func (ptr *Postgres) execute(ctx context.Context, query string, values []interface{}) (res sql.Result, err error) {
@@ -145,7 +157,7 @@ func (ptr *Postgres) execute(ctx context.Context, query string, values []interfa
 
 	stmt, err := ptr.conn.PrepareContext(ctx, query)
 	if err != nil {
-		return nil, errors.New("preparing statement error, " + err.Error() + ", query: " + query)
+		return nil, errors.New(err.Error() + ", query: " + query)
 	}
 	defer stmt.Close()
 
@@ -157,18 +169,26 @@ func (ptr *Postgres) Update(ctx context.Context, table string, fields []string, 
 		return nil, errors.New("length of fields and length of values are different")
 	}
 	query := ptr.generateUpdateQuery(table, fields, condition)
-	return ptr.execute(ctx, query, values)
+	result, err := ptr.execute(ctx, query, values)
+	if err != nil {
+		err = errors.New(err.Error() + ", query: " + query)
+	}
+	return result, err
 }
 
 /*
 Exec - executing prepared SQL string
 */
-func (ptr *Postgres) Exec(ctx context.Context, SQL string) (rows *sql.Rows, err error) {
+func (ptr *Postgres) Exec(ctx context.Context, query string) (rows *sql.Rows, err error) {
 	if err = ptr.checkConnection(ctx); err != nil {
 		return
 	}
 
-	return ptr.conn.QueryContext(ctx, SQL)
+	rows, err = ptr.conn.QueryContext(ctx, query)
+	if err != nil {
+		err = errors.New(err.Error() + ", query: " + query)
+	}
+	return rows, err
 }
 
 func (ptr *Postgres) checkConnection(ctx context.Context) error {
@@ -338,12 +358,12 @@ func (ptr *Postgres) ExecTransaction(ctx context.Context, queryCtx []*QueryConte
 
 		stmt, err := tx.PrepareContext(ctx, query)
 		if err != nil {
-			return errors.New("preparing statement error, " + err.Error() + ", query: " + query)
+			return errors.New(err.Error() + ", query: " + query)
 		}
 		defer stmt.Close()
 
 		if _, err = stmt.ExecContext(ctx, context.Values...); err != nil {
-			return errors.New("exec statement error, " + err.Error() + ", query: " + query)
+			return errors.New(err.Error() + ", query: " + query)
 		}
 	}
 
