@@ -134,6 +134,10 @@ func NewTasksExecutor(queueSize int, params *MonitoringParams) *TasksExecutor {
 	}
 }
 
+func (ptr *TasksExecutor) TaskQueueLen() int {
+	return len(ptr.tasks)
+}
+
 func (ptr *TasksExecutor) Run() {
 	if ptr.monitoringParams != nil {
 		go ptr.monitoringCycle()
