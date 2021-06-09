@@ -7,6 +7,8 @@ import (
 	"os"
 )
 
+const valueSizeInBytes = 8 // 64-bit value
+
 type FileStorage struct {
 	filename string
 	file     *os.File
@@ -54,7 +56,7 @@ func (ptr *FileStorage) SetValue(value, offset int64) error {
 		return err
 	}
 
-	seekOffset, err := ptr.file.Seek(offset, os.SEEK_SET)
+	seekOffset, err := ptr.file.Seek(offset*valueSizeInBytes, os.SEEK_SET)
 	if err != nil {
 		return err
 	}
@@ -72,12 +74,13 @@ func (ptr *FileStorage) GetValue(offset int64) (int64, error) {
 		return 0, errors.New("file is not open")
 	}
 
-	if _, err := ptr.file.Seek(offset, 0); err != nil {
+	seekOffset, err := ptr.file.Seek(offset*valueSizeInBytes, os.SEEK_SET)
+	if err != nil {
 		return 0, err
 	}
 
 	buf := make([]byte, 8)
-	if _, err := ptr.file.ReadAt(buf, offset); err != nil {
+	if _, err := ptr.file.ReadAt(buf, seekOffset); err != nil {
 		return 0, err
 	}
 
