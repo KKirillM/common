@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"io"
 	"os"
 )
 
@@ -76,11 +77,17 @@ func (ptr *FileStorage) GetValue(offset int64) (int64, error) {
 
 	seekOffset, err := ptr.file.Seek(offset*valueSizeInBytes, os.SEEK_SET)
 	if err != nil {
+		if err == io.EOF {
+			return 0, nil
+		}
 		return 0, err
 	}
 
 	buf := make([]byte, 8)
 	if _, err := ptr.file.ReadAt(buf, seekOffset); err != nil {
+		if err == io.EOF {
+			return 0, nil
+		}
 		return 0, err
 	}
 
