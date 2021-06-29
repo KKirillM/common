@@ -67,23 +67,25 @@ func (ptr *Postgres) LoadConfig(config *DBConfig) error {
 	return nil
 }
 
-func (ptr *Postgres) Connect() (err error) {
-	dbConfig := ptr.config
-	ptr.connectionInfo = fmt.Sprintf("postgres://%v:%v@%v:%v/%v?sslmode=%v",
-		dbConfig.User,
-		dbConfig.Password,
-		dbConfig.Host,
-		dbConfig.Port,
-		dbConfig.Database,
-		dbConfig.SSLmode,
-	)
+func (ptr *Postgres) Connect(ctx context.Context) (err error) {
 
-	ptr.conn, err = sql.Open(sqlDriverName, ptr.connectionInfo)
-	if err != nil {
-		return errors.New("connection failed, " + err.Error())
+	if ptr.conn == nil {
+		ptr.connectionInfo = fmt.Sprintf("postgres://%v:%v@%v:%v/%v?sslmode=%v",
+			ptr.config.User,
+			ptr.config.Password,
+			ptr.config.Host,
+			ptr.config.Port,
+			ptr.config.Database,
+			ptr.config.SSLmode,
+		)
+
+		ptr.conn, err = sql.Open(sqlDriverName, ptr.connectionInfo)
+		if err != nil {
+			return errors.New("connection failed, " + err.Error())
+		}
 	}
 
-	return nil
+	return ptr.conn.PingContext(ctx)
 }
 
 /*
