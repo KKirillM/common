@@ -195,10 +195,10 @@ func (ptr *Postgres) Exec(ctx context.Context, query string) (rows *sql.Rows, er
 
 func (ptr *Postgres) checkConnection(ctx context.Context) error {
 	if ptr.conn == nil {
-		return ptr.Connect()
+		return ptr.Connect(ctx)
 	}
 	if ptr.conn.Stats().OpenConnections == 0 {
-		return ptr.Connect()
+		return ptr.Connect(ctx)
 	}
 	return nil
 	//return ptr.conn.PingContext(ctx)
