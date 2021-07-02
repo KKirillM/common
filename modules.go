@@ -37,14 +37,20 @@ type IModule interface {
 	Stop() error
 	GetID() ModuleID
 	IsStarted() bool
+	DataHandler(msgType int, data interface{})
 }
 
-type ITerminator interface {
+// с помощью интерфейса IServer модуль IModule может:
+// - послать данные любому другому модулю
+// - перезапустить себя
+// - завершить работу всего приложения (в случае критической ошибки)
+type IServer interface {
+	SendData(ID ModuleID, msgType int, data interface{}) error
+	Restart(module IModule, reason string, timeout time.Duration)
 	Terminate(module IModule, reason string, timeout time.Duration)
 }
 
-// с помощью указателя не интерфейс ITerminator модуль IModule может завершить работу приложения
-type ModuleCreator func(ITerminator, ModuleID) (IModule, error)
+type ModuleCreator func(IServer, ModuleID) (IModule, error)
 
 type ModuleServer struct {
 	mu            sync.Mutex
@@ -67,7 +73,7 @@ func (ptr *ModuleServer) LoadConfig(config *ModuleServerConfig) ([]ModuleID, err
 		return nil, errors.New("there are no any modules in config")
 	}
 
-	modulesID := make([]ModuleID, 0, mLen)
+	modulesIDList := make([]ModuleID, 0, mLen)
 
 	for _, cfg := range config.Modules {
 		if cfg.Disable {
@@ -79,24 +85,17 @@ func (ptr *ModuleServer) LoadConfig(config *ModuleServerConfig) ([]ModuleID, err
 			return nil, errors.New("creation module " + string(cfg.ID) + " failed, " + err.Error())
 		}
 
+		ptr.modules[cfg.ID] = newModule
+
 		if err := newModule.LoadConfig(cfg.Params); err != nil {
 			return nil, errors.New("loading config for module " + string(cfg.ID) + " failed, " + err.Error())
 		}
 
-		ptr.modules[cfg.ID] = newModule
-
-		modulesID = append(modulesID, cfg.ID)
+		modulesIDList = append(modulesIDList, cfg.ID)
 	}
 
-	return modulesID, nil
+	return modulesIDList, nil
 }
-
-// func (ptr *ModuleServer) GetModule(ID ModuleID) IModule {
-// 	ptr.mu.Lock()
-// 	defer ptr.mu.Unlock()
-
-// 	return ptr.modules[ID]
-// }
 
 // TODO: добавить параллельный запуск всех модулей
 func (ptr *ModuleServer) Start() error {
@@ -122,10 +121,12 @@ func (ptr *ModuleServer) Stop() error {
 			errList += "[" + err.Error() + "], "
 		}
 	}
+
 	if len(errList) != 0 {
 		errList = errList[:len(errList)-2]
 		return errors.New(errList)
 	}
+
 	return nil
 }
 
@@ -153,6 +154,42 @@ func (ptr *ModuleServer) stopModule(ID ModuleID) error {
 	}
 
 	return module.Stop()
+}
+
+func (ptr *ModuleServer) SendData(ID ModuleID, msgType int, data interface{}) error {
+	module, ok := ptr.modules[ID]
+	if !ok {
+		return errors.New("module " + string(ID) + " not found")
+	}
+
+	if !module.IsStarted() {
+		return errors.New("module " + string(ID) + " is not started")
+	}
+
+	module.DataHandler(msgType, data)
+
+	return nil
+}
+
+func (ptr *ModuleServer) Restart(module IModule, reason string, timeout time.Duration) {
+	log.Println("W> module " + string(module.GetID()) + " requested a restart, reason: " + reason)
+
+	if err := module.Stop(); err != nil {
+		TerminateCurrentProcess("module '" + string(module.GetID()) + "' stop failed: " + err.Error())
+		return
+	}
+
+	if err := module.Start(); err != nil {
+		TerminateCurrentProcess("module '" + string(module.GetID()) + "' start failed: " + err.Error())
+		return
+	}
+
+	go func() {
+		time.Sleep(timeout)
+		if !module.IsStarted() {
+			TerminateCurrentProcess("timeout " + timeout.String() + " reached while restarting")
+		}
+	}()
 }
 
 func (ptr *ModuleServer) Terminate(module IModule, reason string, timeout time.Duration) {
