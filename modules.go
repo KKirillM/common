@@ -50,7 +50,7 @@ type IServer interface {
 	Terminate(module IModule, reason string, timeout time.Duration)
 }
 
-type ModuleCreator func(IServer, string) (IModule, error)
+type ModuleCreator func(IServer, string, string) (IModule, error)
 
 type ModuleServer struct {
 	mu            sync.Mutex
@@ -80,7 +80,7 @@ func (ptr *ModuleServer) LoadConfig(config *ModuleServerConfig) ([]string, error
 			continue
 		}
 
-		newModule, err := ptr.moduleCreator(ptr, cfg.Type)
+		newModule, err := ptr.moduleCreator(ptr, cfg.Type, cfg.ID)
 		if err != nil {
 			return nil, errors.New("creation module " + cfg.ID + " failed, " + err.Error())
 		}
