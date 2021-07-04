@@ -45,7 +45,7 @@ type IModule interface {
 // - перезапустить себя
 // - завершить работу всего приложения (в случае критической ошибки)
 type IServer interface {
-	SendData(name string, msgType int, data interface{}) error
+	SendData(moduleID string, msgType int, data interface{}) error
 	Restart(module IModule, reason string, timeout time.Duration)
 	Terminate(module IModule, reason string, timeout time.Duration)
 }
