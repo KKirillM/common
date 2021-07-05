@@ -97,33 +97,74 @@ func (ptr *ModuleServer) LoadConfig(config *ModuleServerConfig) ([]string, error
 	return modulesList, nil
 }
 
-// TODO: добавить параллельный запуск всех модулей
 func (ptr *ModuleServer) Start() error {
+	pool := NewJobPool(len(ptr.modules))
+	errorsQueue := make(chan error, len(ptr.modules))
+
 	ptr.mu.Lock()
-	defer ptr.mu.Unlock()
 
 	for id := range ptr.modules {
-		if err := ptr.startModule(id); err != nil {
-			return err
+		func(moduleID string) {
+			pool.AddJob(func() {
+				errorsQueue <- ptr.startModule(moduleID)
+			})
+		}(id)
+	}
+	pool.WaitAll()
+	pool.Release()
+
+	ptr.mu.Unlock()
+
+	close(errorsQueue)
+
+	var errList string
+	for err := range errorsQueue {
+		if err != nil {
+			if len(errList) > 0 {
+				errList += ", "
+			}
+			errList += "[" + err.Error() + "]"
 		}
 	}
+
+	if len(errList) > 0 {
+		return errors.New(errList)
+	}
+
 	return nil
 }
 
-// TODO: добавить параллельную остановку всех модулей
 func (ptr *ModuleServer) Stop() error {
+	pool := NewJobPool(len(ptr.modules))
+	errorsQueue := make(chan error, len(ptr.modules))
+
 	ptr.mu.Lock()
-	defer ptr.mu.Unlock()
+
+	for id := range ptr.modules {
+		func(moduleID string) {
+			pool.AddJob(func() {
+				errorsQueue <- ptr.stopModule(moduleID)
+			})
+		}(id)
+	}
+	pool.WaitAll()
+	pool.Release()
+
+	ptr.mu.Unlock()
+
+	close(errorsQueue)
 
 	var errList string
-	for id := range ptr.modules {
-		if err := ptr.stopModule(id); err != nil {
-			errList += "[" + err.Error() + "], "
+	for err := range errorsQueue {
+		if err != nil {
+			if len(errList) > 0 {
+				errList += ", "
+			}
+			errList += "[" + err.Error() + "]"
 		}
 	}
 
-	if len(errList) != 0 {
-		errList = errList[:len(errList)-2]
+	if len(errList) > 0 {
 		return errors.New(errList)
 	}
 
