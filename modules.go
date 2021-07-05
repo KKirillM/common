@@ -37,7 +37,7 @@ type IModule interface {
 	GetID() string
 	GetType() string
 	IsStarted() bool
-	DataHandler(msgType int, data interface{})
+	DataHandler(msgType int, data interface{}) error
 }
 
 // с помощью интерфейса IServer модуль IModule может:
@@ -166,9 +166,7 @@ func (ptr *ModuleServer) CallModule(id string, msgType int, data interface{}) er
 		return errors.New("module " + id + " is not started")
 	}
 
-	module.DataHandler(msgType, data)
-
-	return nil
+	return module.DataHandler(msgType, data)
 }
 
 func (ptr *ModuleServer) Restart(module IModule, reason string, timeout time.Duration) {
