@@ -45,7 +45,7 @@ type IModule interface {
 // - перезапустить себя
 // - завершить работу всего приложения (в случае критической ошибки)
 type IServer interface {
-	SendData(moduleID string, msgType int, data interface{}) error
+	CallModule(moduleID string, msgType int, data interface{}) error
 	Restart(module IModule, reason string, timeout time.Duration)
 	Terminate(module IModule, reason string, timeout time.Duration)
 }
@@ -156,7 +156,7 @@ func (ptr *ModuleServer) stopModule(id string) error {
 	return module.Stop()
 }
 
-func (ptr *ModuleServer) SendData(id string, msgType int, data interface{}) error {
+func (ptr *ModuleServer) CallModule(id string, msgType int, data interface{}) error {
 	module, ok := ptr.modules[id]
 	if !ok {
 		return errors.New("module " + id + " not found")
