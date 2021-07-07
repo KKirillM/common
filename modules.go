@@ -246,7 +246,7 @@ func (ptr *ModuleServer) Terminate(module IModule, reason string, timeout time.D
 	go func() {
 		time.Sleep(timeout)
 		if !module.IsStarted() {
-			TerminateCurrentProcess("timeout " + timeout.String() + " reached while restarting")
+			TerminateCurrentProcess("timeout " + timeout.String() + " reached while stopping")
 		}
 	}()
 }
