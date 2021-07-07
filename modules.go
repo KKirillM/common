@@ -56,6 +56,7 @@ type ModuleServer struct {
 	mu            sync.Mutex
 	modules       map[string]IModule
 	moduleCreator ModuleCreator
+	//interruptChan chan os.Signal
 }
 
 func NewModuleServer(creator ModuleCreator) *ModuleServer {
@@ -63,6 +64,7 @@ func NewModuleServer(creator ModuleCreator) *ModuleServer {
 		mu:            sync.Mutex{},
 		modules:       make(map[string]IModule),
 		moduleCreator: creator,
+		//interruptChan: make(chan os.Signal, 1),
 	}
 }
 
@@ -233,15 +235,18 @@ func (ptr *ModuleServer) Restart(module IModule, reason string, timeout time.Dur
 
 func (ptr *ModuleServer) Terminate(module IModule, reason string, timeout time.Duration) {
 	log.Println("E> module " + string(module.GetID()) + " requested a stop, reason: " + reason)
+
 	if err := ptr.Stop(); err != nil {
 		TerminateCurrentProcess("some modules stop failed: " + err.Error())
 		return
 	}
 
+	TerminateCurrentProcess("all modules stopped correctly")
+
 	go func() {
 		time.Sleep(timeout)
-		if module.IsStarted() {
-			TerminateCurrentProcess("timeout " + timeout.String() + " reached while stopping")
+		if !module.IsStarted() {
+			TerminateCurrentProcess("timeout " + timeout.String() + " reached while restarting")
 		}
 	}()
 }
