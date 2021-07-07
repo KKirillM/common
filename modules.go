@@ -46,7 +46,7 @@ type IModule interface {
 // - завершить работу всего приложения (в случае критической ошибки)
 type IServer interface {
 	CallModule(moduleID string, msgType int, data interface{}) error
-	Restart(module IModule, reason string, timeout time.Duration)
+	RestartModule(moduleID string, reason string, timeout time.Duration)
 	Terminate(module IModule, reason string, timeout time.Duration)
 }
 
@@ -212,8 +212,13 @@ func (ptr *ModuleServer) CallModule(id string, msgType int, data interface{}) er
 	return module.DataHandler(msgType, data)
 }
 
-func (ptr *ModuleServer) Restart(module IModule, reason string, timeout time.Duration) {
-	log.Println("W> module " + string(module.GetID()) + " requested a restart, reason: " + reason)
+func (ptr *ModuleServer) RestartModule(id string, reason string, timeout time.Duration) {
+	log.Println("W> module " + id + " requested a restart, reason: " + reason)
+
+	module, ok := ptr.modules[id]
+	if !ok {
+		log.Println("E> module " + id + " not found")
+	}
 
 	if err := module.Stop(); err != nil {
 		TerminateCurrentProcess("module '" + module.GetID() + "' stop failed: " + err.Error())
