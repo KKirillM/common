@@ -1,6 +1,7 @@
 package common
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,8 +37,9 @@ type IModule interface {
 	Stop() error
 	GetID() string
 	GetType() string
+	Ctx() context.Context
 	IsStarted() bool
-	DataHandler(msgType int, data interface{}) error
+	DataHandler(ctx context.Context, msgType int, data interface{}) error
 }
 
 // с помощью интерфейса IServer модуль IModule может:
@@ -209,7 +211,7 @@ func (ptr *ModuleServer) CallModule(id string, msgType int, data interface{}) er
 		return errors.New("module " + id + " is not started")
 	}
 
-	return module.DataHandler(msgType, data)
+	return module.DataHandler(module.Ctx(), msgType, data)
 }
 
 func (ptr *ModuleServer) RestartModule(id string, reason string, timeout time.Duration) {
