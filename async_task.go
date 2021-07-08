@@ -18,10 +18,14 @@ type managedObject struct {
 }
 
 func newManagedObject() managedObject {
-	return managedObject{
-		breakChan:  make(chan struct{}),
-		finishChan: make(chan struct{}),
-	}
+	obj := managedObject{}
+	obj.resetQueues()
+	return obj
+}
+
+func (ptr *managedObject) resetQueues() {
+	ptr.breakChan = make(chan struct{})
+	ptr.finishChan = make(chan struct{})
 }
 
 func (ptr *managedObject) Break() {
@@ -139,6 +143,8 @@ func (ptr *TasksExecutor) TaskQueueLen() int {
 }
 
 func (ptr *TasksExecutor) Run() {
+	ptr.resetQueues()
+
 	if ptr.monitoringParams != nil {
 		go ptr.monitoringCycle()
 	}
