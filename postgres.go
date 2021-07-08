@@ -439,7 +439,9 @@ func (m *Postgres) GetDBInfo() string {
 
 func (ptr *Postgres) Close() error {
 	if ptr.conn != nil {
-		return ptr.conn.Close()
+		err := ptr.conn.Close()
+		ptr.conn = nil
+		return err
 	}
 	return nil
 }
