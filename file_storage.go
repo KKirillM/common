@@ -47,7 +47,7 @@ func (ptr *FileStorage) Stop() error {
 	return err
 }
 
-func (ptr *FileStorage) SetValue(value, offset int64) error {
+func (ptr *FileStorage) SetValue(value uint64, offset int64) error {
 	if ptr.file == nil {
 		return errors.New("file is not open")
 	}
@@ -69,7 +69,7 @@ func (ptr *FileStorage) SetValue(value, offset int64) error {
 	return nil
 }
 
-func (ptr *FileStorage) GetValue(offset int64) (int64, error) {
+func (ptr *FileStorage) GetValue(offset int64) (uint64, error) {
 
 	if ptr.file == nil {
 		return 0, errors.New("file is not open")
@@ -91,7 +91,7 @@ func (ptr *FileStorage) GetValue(offset int64) (int64, error) {
 		return 0, err
 	}
 
-	value := int64(binary.LittleEndian.Uint64(buf))
+	value := binary.LittleEndian.Uint64(buf)
 
 	return value, nil
 }
