@@ -111,15 +111,15 @@ func IsContextCancelled(ctx context.Context) bool {
 	}
 }
 
-func SleepWithContext(ctx context.Context, duration time.Duration) {
+func SleepWithContext(ctx context.Context, duration time.Duration) bool {
 	timer := time.NewTimer(duration)
 	defer timer.Stop()
 
 	select {
 	case <-ctx.Done():
-		return
+		return false
 	case <-timer.C:
-		return
+		return true
 	}
 }
 
