@@ -334,7 +334,31 @@ func (ptr *Postgres) InsertBatch(ctx context.Context, table string, fields []str
 	return err
 }
 
-func (ptr *Postgres) ExecTransaction(ctx context.Context, queryCtx []*QueryContext) error {
+func (ptr *Postgres) ExecTransaction(ctx context.Context, queries []string) error {
+	if err := ptr.checkConnection(ctx); err != nil {
+		return err
+	}
+
+	tx, err := ptr.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	for _, query := range queries {
+		if len(query) == 0 {
+			return errors.New("one of query is emtpy")
+		}
+
+		_, err := tx.ExecContext(ctx, query)
+		if err != nil {
+			return errors.New(err.Error() + ", query: " + query)
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (ptr *Postgres) ExecInsertTransaction(ctx context.Context, queryCtx []*QueryContext) error {
 	if err := ptr.checkConnection(ctx); err != nil {
 		return err
 	}
@@ -369,11 +393,7 @@ func (ptr *Postgres) ExecTransaction(ctx context.Context, queryCtx []*QueryConte
 		}
 	}
 
-	if err = tx.Commit(); err != nil {
-		return err
-	}
-
-	return nil
+	return tx.Commit()
 }
 
 func (ptr *Postgres) Listen(ctx context.Context, channel string) error {
