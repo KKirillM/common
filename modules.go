@@ -47,6 +47,7 @@ type IModule interface {
 // - перезапустить себя
 // - завершить работу всего приложения (в случае критической ошибки)
 type IServer interface {
+	Ctx() context.Context
 	CallModule(moduleID string, msgType int, data interface{}) error
 	RestartModule(moduleID string, reason string, timeout time.Duration)
 	Terminate(module IModule, reason string, timeout time.Duration)
@@ -55,6 +56,8 @@ type IServer interface {
 type ModuleCreator func(IServer, string, string) (IModule, error)
 
 type ModuleServer struct {
+	ctx           context.Context
+	cancelCtx     context.CancelFunc
 	mu            sync.Mutex
 	modules       map[string]IModule
 	moduleCreator ModuleCreator
@@ -62,12 +65,24 @@ type ModuleServer struct {
 }
 
 func NewModuleServer(creator ModuleCreator) *ModuleServer {
-	return &ModuleServer{
+	srv := ModuleServer{
 		mu:            sync.Mutex{},
 		modules:       make(map[string]IModule),
 		moduleCreator: creator,
 		//interruptChan: make(chan os.Signal, 1),
 	}
+
+	srv.ctx, srv.cancelCtx = context.WithCancel(context.Background())
+
+	return &srv
+}
+
+func (ptr *ModuleServer) Ctx() context.Context {
+	return ptr.ctx
+}
+
+func (ptr *ModuleServer) Wait() <-chan struct{} {
+	return ptr.ctx.Done()
 }
 
 func (ptr *ModuleServer) LoadConfig(config *ModuleServerConfig) ([]string, error) {
@@ -107,12 +122,12 @@ func (ptr *ModuleServer) Start() error {
 
 	ptr.mu.Lock()
 
-	for id := range ptr.modules {
-		func(moduleID string) {
+	for id, md := range ptr.modules {
+		func(moduleID string, module IModule) {
 			pool.AddJob(func() {
-				errorsQueue <- ptr.startModule(moduleID)
+				errorsQueue <- ptr.startModule(moduleID, module)
 			})
-		}(id)
+		}(id, md)
 	}
 	pool.WaitAll()
 	pool.Release()
@@ -139,17 +154,19 @@ func (ptr *ModuleServer) Start() error {
 }
 
 func (ptr *ModuleServer) Stop() error {
+	ptr.cancelCtx()
+
 	pool := NewJobPool(len(ptr.modules))
 	errorsQueue := make(chan error, len(ptr.modules))
 
 	ptr.mu.Lock()
 
-	for id := range ptr.modules {
-		func(moduleID string) {
+	for id, md := range ptr.modules {
+		func(moduleID string, module IModule) {
 			pool.AddJob(func() {
-				errorsQueue <- ptr.stopModule(moduleID)
+				errorsQueue <- ptr.stopModule(moduleID, module)
 			})
-		}(id)
+		}(id, md)
 	}
 	pool.WaitAll()
 	pool.Release()
@@ -175,10 +192,9 @@ func (ptr *ModuleServer) Stop() error {
 	return nil
 }
 
-func (ptr *ModuleServer) startModule(id string) error {
-	module, ok := ptr.modules[id]
-	if !ok {
-		return errors.New("module " + id + " not found")
+func (ptr *ModuleServer) startModule(id string, module IModule) error {
+	if module == nil {
+		return errors.New("module " + id + " is nil")
 	}
 
 	if module.IsStarted() {
@@ -188,10 +204,9 @@ func (ptr *ModuleServer) startModule(id string) error {
 	return module.Start()
 }
 
-func (ptr *ModuleServer) stopModule(id string) error {
-	module, ok := ptr.modules[id]
-	if !ok {
-		return errors.New("module " + id + " not found")
+func (ptr *ModuleServer) stopModule(id string, module IModule) error {
+	if module == nil {
+		return errors.New("module " + id + " is nil")
 	}
 
 	if !module.IsStarted() {
