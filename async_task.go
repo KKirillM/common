@@ -177,8 +177,16 @@ func (ptr *TasksExecutor) ExecuteAnyway(ctx context.Context, taskName string, ta
 		return errors.New("tasks executor stopped")
 	}
 
+	taskWithContext := func() {
+		// функция task может долго ждать в очереди своего исполнения
+		// к том моменту контекст уже может быть закрыт
+		if !IsContextCancelled(ctx) {
+			task()
+		}
+	}
+
 	select {
-	case ptr.tasks <- task:
+	case ptr.tasks <- taskWithContext:
 	case <-ctx.Done():
 	}
 
