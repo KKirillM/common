@@ -344,6 +344,13 @@ func (ptr *Postgres) ExecTransaction(ctx context.Context, queries []string) erro
 		return err
 	}
 
+	complete := false
+	defer func() {
+		if !complete {
+			tx.Rollback()
+		}
+	}()
+
 	for _, query := range queries {
 		if len(query) == 0 {
 			return errors.New("one of query is emtpy")
@@ -354,6 +361,8 @@ func (ptr *Postgres) ExecTransaction(ctx context.Context, queries []string) erro
 			return errors.New(err.Error() + ", query: " + query)
 		}
 	}
+
+	complete = true
 
 	return tx.Commit()
 }
@@ -368,6 +377,13 @@ func (ptr *Postgres) ExecInsertTransaction(ctx context.Context, queryCtx []*Quer
 		return err
 	}
 
+	complete := false
+	defer func() {
+		if !complete {
+			tx.Rollback()
+		}
+	}()
+
 	for _, context := range queryCtx {
 		if len(context.Fields) != len(context.Values) {
 			return errors.New("length of fields and length of values are different")
@@ -376,12 +392,6 @@ func (ptr *Postgres) ExecInsertTransaction(ctx context.Context, queryCtx []*Quer
 		query := ptr.generateInsertQuery(context.Table, context.Fields)
 		query += ptr.generateOnConflictQuery(context.Fields, context.Keys)
 
-		// _, err = tx.ExecContext(context.Ctx, query)
-		// if err != nil {
-		// 	tx.Rollback()
-		// 	return errors.New(err.Error() + ", query: " + query)
-		// }
-
 		stmt, err := tx.PrepareContext(ctx, query)
 		if err != nil {
 			return errors.New(err.Error() + ", query: " + query)
@@ -389,9 +399,12 @@ func (ptr *Postgres) ExecInsertTransaction(ctx context.Context, queryCtx []*Quer
 		defer stmt.Close()
 
 		if _, err = stmt.ExecContext(ctx, context.Values...); err != nil {
+
 			return errors.New(err.Error() + ", query: " + query)
 		}
 	}
+
+	complete = true
 
 	return tx.Commit()
 }
