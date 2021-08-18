@@ -399,7 +399,6 @@ func (ptr *Postgres) ExecInsertTransaction(ctx context.Context, queryCtx []*Quer
 		defer stmt.Close()
 
 		if _, err = stmt.ExecContext(ctx, context.Values...); err != nil {
-
 			return errors.New(err.Error() + ", query: " + query)
 		}
 	}

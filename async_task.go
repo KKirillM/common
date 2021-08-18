@@ -145,7 +145,7 @@ func (ptr *TasksExecutor) TaskQueueLen() int {
 func (ptr *TasksExecutor) Run() {
 	ptr.resetChans()
 
-	if ptr.monitoringParams != nil {
+	if ptr.monitoringParams != nil && cap(ptr.tasks) > 0 {
 		go ptr.monitoringCycle()
 	}
 	go ptr.executionCycle()

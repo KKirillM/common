@@ -11,10 +11,11 @@ import (
 )
 
 type ModuleConfig struct {
-	ID      string          `json:"id"`
-	Type    string          `json:"type"`
-	Disable bool            `json:"disable"`
-	Params  json.RawMessage `json:"params"`
+	ID             string          `json:"id"`
+	Type           string          `json:"type"`
+	Disable        bool            `json:"disable"`
+	TasksQueueSize int             `json:"tasks_queue_size"`
+	Params         json.RawMessage `json:"params"`
 }
 
 type ModuleServerConfig struct {
@@ -53,7 +54,7 @@ type IServer interface {
 	Terminate(module IModule, reason string, timeout time.Duration)
 }
 
-type ModuleCreator func(IServer, string, string) (IModule, error)
+type ModuleCreator func(IServer, string, string, int) (IModule, error)
 
 type ModuleServer struct {
 	ctx           context.Context
@@ -99,7 +100,7 @@ func (ptr *ModuleServer) LoadConfig(config *ModuleServerConfig) ([]string, error
 			continue
 		}
 
-		newModule, err := ptr.moduleCreator(ptr, cfg.Type, cfg.ID)
+		newModule, err := ptr.moduleCreator(ptr, cfg.Type, cfg.ID, cfg.TasksQueueSize)
 		if err != nil {
 			return nil, errors.New("creation module " + cfg.ID + " failed, " + err.Error())
 		}
